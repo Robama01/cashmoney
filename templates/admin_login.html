@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Admin — CashMoney{% endblock %}
+{% block content %}
+<div style="max-width:420px;margin:0 auto">
+<div class="card">
+<h2>🔐 Admin — Connexion</h2>
+<form method="POST" action="/admin/login">
+<label>Email admin</label>
+<input type="email" name="email" required>
+<label>Mot de passe</label>
+<input type="password" name="password" required>
+<button type="submit" class="btn gold" style="width:100%">Connexion admin</button>
+</form>
+</div>
+</div>
+{% endblock %}
