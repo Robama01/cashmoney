@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}CashMoney{% endblock %}</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:sans-serif;background:#0a0a1a;color:#e0e0e0;min-height:100vh}
+.nav{background:#111130;padding:1rem 2rem;display:flex;justify-content:space-between;border-bottom:2px solid #f0b429}
+.logo{font-size:1.5rem;font-weight:bold;color:#f0b429}
+.nav a{color:#e0e0e0;text-decoration:none;margin-left:1rem}
+.nav a:hover{color:#f0b429}
+.box{max-width:1100px;margin:0 auto;padding:2rem 1rem}
+.card{background:#111130;border-radius:12px;padding:1.5rem;margin-bottom:1.5rem;border:1px solid #222250}
+.btn{display:inline-block;padding:.7rem 1.5rem;border-radius:8px;border:none;cursor:pointer;font-size:1rem;text-decoration:none}
+.gold{background:#f0b429;color:#000;font-weight:bold}
+.outline{background:transparent;border:2px solid #f0b429;color:#f0b429}
+.ok{background:#27ae60;color:#fff}
+.ko{background:#e74c3c;color:#fff}
+.alert{padding:1rem;border-radius:8px;margin-bottom:1rem}
+.success{background:#1a3a2a;border:1px solid #27ae60;color:#2ecc71}
+.error{background:#3a1a1a;border:1px solid #e74c3c;color:#e74c3c}
+.info{background:#1a2a3a;border:1px solid #3498db;color:#3498db}
+input{width:100%;padding:.8rem;border-radius:8px;border:1px solid #333360;background:#0a0a1a;color:#e0e0e0;font-size:1rem;margin-bottom:1rem}
+label{display:block;margin-bottom:.3rem;color:#aaa;font-size:.9rem}
+h1,h2,h3{color:#f0b429;margin-bottom:1rem}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem}
+.stat{background:#111130;border-radius:12px;padding:1.2rem;text-align:center;border:1px solid #222250}
+.val{font-size:2rem;font-weight:bold;color:#f0b429}
+.lbl{color:#888;font-size:.9rem;margin-top:.3rem}
+.copy{background:#0a0a1a;border:1px solid #333360;border-radius:8px;padding:.8rem;font-family:monospace;word-break:break-all;cursor:pointer}
+table{width:100%;border-collapse:collapse}
+th,td{padding:.8rem;text-align:left;border-bottom:1px solid #222250}
+th{color:#f0b429}
+@media(max-width:600px){.g2,.g3{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<nav class="nav">
+<div class="logo">💰 CashMoney</div>
+<div>
+{% if session.user_id %}
+<a href="/dashboard">Dashboard</a>
+<a href="/logout">Déconnexion</a>
+{% else %}
+<a href="/login">Connexion</a>
+<a href="/inscription">S'inscrire</a>
+{% endif %}
+</div>
+</nav>
+<div class="box">
+{% with messages=get_flashed_messages(with_categories=true) %}
+{% for cat,msg in messages %}
+<div class="alert {{cat}}">{{msg}}</div>
+{% endfor %}
+{% endwith %}
+{% block content %}{% endblock %}
+</div>
+<script>
+function copyText(t){navigator.clipboard.writeText(t);alert('Copié !');}
+</script>
+</body>
+</html>
