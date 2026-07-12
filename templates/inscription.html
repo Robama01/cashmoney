@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Connexion — CashMoney{% endblock %}
+{% block content %}
+<div style="max-width:420px;margin:0 auto">
+<div class="card">
+<h2>🔐 Connexion</h2>
+<form method="POST">
+<label>Email</label>
+<input type="email" name="email" placeholder="votre@email.com" required>
+<label>Mot de passe</label>
+<input type="password" name="password" placeholder="Votre mot de passe" required>
+<button type="submit" class="btn gold" style="width:100%">Se connecter</button>
+</form>
+<p style="text-align:center;margin-top:1rem;color:#aaa">
+Pas encore de compte ? <a href="/inscription" style="color:#f0b429">S'inscrire</a>
+</p>
+</div>
+</div>
+{% endblock %}
