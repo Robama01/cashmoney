@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — CashMoney{% endblock %}
+{% block content %}
+<h1>👋 Bonjour, {{ user['nom'] }}</h1>
+{% if user['actif'] == 0 %}
+<div class="card" style="border-color:#f0b429">
+<h2>⚡ Activez votre compte</h2>
+<p style="color:#aaa;margin-bottom:1rem">Payez l'adhésion pour commencer à gagner.</p>
+<div style="background:#0a0a1a;border-radius:8px;padding:1rem;margin-bottom:1rem">
+<p style="color:#aaa">Montant : <strong style="color:#f0b429">{{ membership }} USDT</strong></p>
+<p style="color:#aaa">Réseau : <strong style="color:#f0b429">BEP20</strong></p>
+<p style="color:#aaa">Adresse :</p>
+<div class="copy" onclick="copyText('{{ wallet }}')">{{ wallet }} 📋</div>
+</div>
+{% if pending %}
+<div class="alert info">⏳ Vérification automatique en cours... 1-2 minutes après réception.</div>
+{% else %}
+<form method="POST" action="/payer">
+<label>Votre adresse wallet BEP20 (recommandé)</label>
+<input type="text" name="wallet_sender" placeholder="0x...">
+<button type="submit" class="btn gold">✅ J'ai envoyé — Vérifier automatiquement</button>
+</form>
+{% endif %}
+</div>
+{% endif %}
+<div class="g3">
+<div class="stat"><div class="val">{{ user['gains_total']|int }}</div><div class="lbl">Gains (FCFA)</div></div>
+<div class="stat"><div class="val">{{ filleuls }}</div><div class="lbl">Filleuls actifs</div></div>
+<div class="stat"><div class="val">{{ '✅' if user['actif'] else '⏳' }}</div><div class="lbl">Statut</div></div>
+</div>
+{% if user['actif'] == 1 %}
+<div class="card">
+<h2>👥 Mon lien de parrainage</h2>
+<div class="copy" onclick="copyText('{{ lien_parrainage }}')">{{ lien_parrainage }} 📋</div>
+</div>
+{% endif %}
+{% if commissions %}
+<div class="card">
+<h2>💰 Dernières commissions</h2>
+<table>
+<tr><th>Niveau</th><th>Montant</th><th>Date</th></tr>
+{% for c in commissions %}
+<tr><td>Niveau {{ c['niveau'] }}</td><td style="color:#f0b429">{{ c['montant'] }} FCFA</td><td style="color:#888">{{ c['date'] }}</td></tr>
+{% endfor %}
+</table>
+</div>
+{% endif %}
+{% endblock %}
