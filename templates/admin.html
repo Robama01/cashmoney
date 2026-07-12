@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Admin Dashboard — CashMoney{% endblock %}
+{% block content %}
+<h1>🛠️ Admin Dashboard</h1>
+<div class="g3" style="margin-bottom:1.5rem">
+<div class="stat"><div class="val">{{ total }}</div><div class="lbl">Total utilisateurs</div></div>
+<div class="stat"><div class="val">{{ actifs }}</div><div class="lbl">Comptes actifs</div></div>
+<div class="stat"><div class="val">{{ total_gains }}</div><div class="lbl">Gains distribués (FCFA)</div></div>
+</div>
+<div class="card">
+<h2>⏳ Paiements en attente ({{ pending_payments|length }})</h2>
+{% if pending_payments %}
+<table>
+<tr><th>Nom</th><th>Email</th><th>Montant</th><th>Date</th><th>Actions</th></tr>
+{% for p in pending_payments %}
+<tr>
+<td>{{ p['nom'] }}</td>
+<td>{{ p['email'] }}</td>
+<td style="color:#f0b429">{{ p['montant'] }} USDT</td>
+<td style="color:#888">{{ p['date'] }}</td>
+<td>
+<a href="/admin/confirmer/{{ p['id'] }}" class="btn ok" style="padding:.3rem .8rem;font-size:.85rem">✅</a>
+<a href="/admin/rejeter/{{ p['id'] }}" class="btn ko" style="padding:.3rem .8rem;font-size:.85rem;margin-left:.3rem">❌</a>
+</td>
+</tr>
+{% endfor %}
+</table>
+{% else %}
+<p style="color:#888">Aucun paiement en attente.</p>
+{% endif %}
+</div>
+<a href="/logout" class="btn outline">Déconnexion</a>
+{% endblock %}
