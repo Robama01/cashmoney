@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Inscription{% endblock %}
+{% block content %}
+<div style="max-width:450px;margin:0 auto">
+<div class="card">
+<h2>Créer un compte</h2>
+<form method="POST" action="/inscription">
+<label>Nom complet</label>
+<input type="text" name="nom" placeholder="Votre nom" required>
+<label>Email</label>
+<input type="email" name="email" placeholder="votre@email.com" required>
+<label>Mot de passe</label>
+<input type="password" name="password" placeholder="Min. 6 caractères" required>
+<label>Code parrainage (optionnel)</label>
+<input type="text" name="parrain_code" value="{{ ref or '' }}">
+<button type="submit" class="btn gold" style="width:100%">Créer mon compte</button>
+</form>
+<p style="text-align:center;margin-top:1rem;color:#aaa">
+Déjà un compte ? <a href="/login" style="color:#f0b429">Se connecter</a>
+</p>
+</div>
+</div>
+{% endblock %}
