@@ -230,7 +230,7 @@ def retrait():
  retraits=c.fetchall()
  conn.close()
  return render_template("retrait.html",user=u,retraits=retraits)
-init_db()
+init_db(c.execute("CREATE TABLE IF NOT EXISTS retraits (id SERIAL PRIMARY KEY,user_id INTEGER,montant REAL,wallet TEXT,statut TEXT DEFAULT 'en_attente',date TEXT)")
 start_payment_checker(interval=60)
 if __name__=="__main__":
  port=int(os.environ.get("PORT",5000))
