@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Retrait — CashMoney{% endblock %}
+{% block content %}
+<div style="max-width:500px;margin:0 auto">
+<h1>💸 Demande de retrait</h1>
+<div class="stat" style="margin-bottom:1.5rem">
+<div class="val">{{ user['gains_total']|int }}</div>
+<div class="lbl">Gains disponibles (FCFA)</div>
+</div>
+<div class="card">
+<h2>📤 Nouveau retrait</h2>
+<form method="POST" action="/retrait">
+<label>Montant à retirer (FCFA)</label>
+<input type="number" name="montant" placeholder="Ex: 2000" min="1000" max="{{ user['gains_total']|int }}" required>
+<label>Votre adresse wallet USDT BEP20</label>
+<input type="text" name="wallet" placeholder="0x..." required>
+<label>Réseau</label>
+<input type="text" value="BEP20 (Binance Smart Chain)" readonly style="opacity:0.7">
+<button type="submit" class="btn gold" style="width:100%">💸 Demander le retrait</button>
+</form>
+</div>
+{% if retraits %}
+<div class="card">
+<h2>📋 Historique des retraits</h2>
+<table>
+<tr><th>Montant</th><th>Statut</th><th>Date</th></tr>
+{% for r in retraits %}
+<tr>
+<td style="color:#f0b429">{{ r['montant'] }} FCFA</td>
+<td>
+{% if r['statut'] == 'en_attente' %}<span class="badge badge-yellow">⏳ En attente</span>
+{% elif r['statut'] == 'confirme' %}<span class="badge badge-green">✅ Payé</span>
+{% else %}<span class="badge badge-red">❌ Rejeté</span>{% endif %}
+</td>
+<td style="color:#888">{{ r['date'] }}</td>
+</tr>
+{% endfor %}
+</table>
+</div>
+{% endif %}
+</div>
+{% endblock %}
