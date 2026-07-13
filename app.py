@@ -138,6 +138,7 @@ def login():
         u=get_user_by_email(email)
         if u and u["password_hash"]==hash_password(password):
             session["user_id"]=u["id"]
+            
             return redirect(url_for("dashboard"))
         flash("Email ou mot de passe incorrect.","error")
     return render_template("login.html")
@@ -146,3 +147,88 @@ def login():
 def logout():
     session.clear()
     return redirect(url_for("index"))
+    @app.route("/dashboard")
+@login_required
+def dashboard():
+    u=get_user_by_id(session["user_id"])
+    conn=get_db()
+    filleuls=conn.execute("SELECT COUNT(*) as n FROM users WHERE parrain_id=? AND actif=1",(u["id"],)).fetchone()["n"]
+    commissions=conn.execute("SELECT * FROM commissions WHERE beneficiaire_id=? ORDER BY date DESC LIMIT 10",(u["id"],)).fetchall()
+    pending=conn.execute("SELECT * FROM paiements WHERE user_id=? AND statut='en_attente'",(u["id"],)).fetchone()
+    conn.close()
+    lien=request.host_url+"inscription?ref="+str(u["id"])
+    return render_template("dashboard.html",user=u,filleuls=filleuls,commissions=commissions,pending=pending,lien_parrainage=lien,wallet=WALLET_USDT,membership=MEMBERSHIP_USDT,gains_niveau=GAINS_NIVEAU)
+
+@app.route("/payer",methods=["POST"])
+@login_required
+def payer():
+    u=get_user_by_id(session["user_id"])
+    if u["actif"]==1:
+        flash("Compte déjà actif !","success")
+        return redirect(url_for("dashboard"))
+    ws=request.form.get("wallet_sender","").strip()
+    conn=get_db()
+    ex=conn.execute("SELECT id FROM paiements WHERE user_id=? AND statut='en_attente'",(u["id"],)).fetchone()
+    if not ex:
+        conn.execute("INSERT INTO paiements (user_id,montant,wallet_sender,date) VALUES (?,?,?,?)",(u["id"],MEMBERSHIP_USDT,ws or None,datetime.now().strftime("%Y-%m-%d %H:%M")))
+        if ws: conn.execute("UPDATE users SET wallet_sender=? WHERE id=?",(ws,u["id"]))
+        conn.commit()
+    conn.close()
+    flash("Paiement enregistré ! Vérification automatique en cours.","success")
+    return redirect(url_for("dashboard"))
+
+@app.route("/admin")
+def admin_login_page():
+    return render_template("admin_login.html")
+
+@app.route("/admin/login",methods=["POST"])
+def admin_login():
+    email=request.form.get("email")
+    password=request.form.get("password")
+    if email==ADMIN_ID_WEB and password==os.environ.get("ADMIN_PASSWORD","cashmoney2024"):
+        session["admin"]=True
+        return redirect(url_for("admin_dashboard"))
+    flash("Identifiants incorrects.","error")
+    return redirect(url_for("admin_login_page"))
+
+@app.route("/admin/dashboard")
+def admin_dashboard():
+    if not session.get("admin"): return redirect(url_for("admin_login_page"))
+    conn=get_db()
+    total=conn.execute("SELECT COUNT(*) as n FROM users").fetchone()["n"]
+    actifs=conn.execute("SELECT COUNT(*) as n FROM users WHERE actif=1").fetchone()["n"]
+    pending=conn.execute("SELECT p.*,u.nom,u.email FROM paiements p JOIN users u ON u.id=p.user_id WHERE p.statut='en_attente'").fetchall()
+    gains=conn.execute("SELECT SUM(gains_total) as s FROM users").fetchone()["s"] or 0
+    conn.close()
+    return render_template("admin.html",total=total,actifs=actifs,pending_payments=pending,total_gains=int(gains))
+
+@app.route("/admin/confirmer/<int:pid>")
+def admin_confirmer(pid):
+    if not session.get("admin"): return redirect(url_for("admin_login_page"))
+    conn=get_db()
+    p=conn.execute("SELECT * FROM paiements WHERE id=?",(pid,)).fetchone()
+    if p:
+        conn.execute("UPDATE paiements SET statut='confirme' WHERE id=?",(pid,))
+        conn.execute("UPDATE users SET actif=1 WHERE id=?",(p["user_id"],))
+        conn.commit()
+        distribuer_commissions(p["user_id"])
+    conn.close()
+    flash("Confirmé !","success")
+    return redirect(url_for("admin_dashboard"))
+
+@app.route("/admin/rejeter/<int:pid>")
+def admin_rejeter(pid):
+    if not session.get("admin"): return redirect(url_for("admin_login_page"))
+    conn=get_db()
+    conn.execute("UPDATE paiements SET statut='rejete' WHERE id=?",(pid,))
+    conn.commit()
+    conn.close()
+    flash("Rejeté.","info")
+    return redirect(url_for("admin_dashboard"))
+
+init_db()
+start_payment_checker(interval=60)
+
+if __name__=="__main__":
+    port=int(os.environ.get("PORT",5000))
+    app.run(host="0.0.0.0",port=port,debug=False)
