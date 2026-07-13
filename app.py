@@ -202,6 +202,34 @@ def admin_rejeter(pid):
  conn.close()
  flash("Rejeté.","info")
  return redirect(url_for("admin_dashboard"))
+ @app.route("/retrait",methods=["GET","POST"])
+@lr
+def retrait():
+ u=gui(session["user_id"])
+ if u["actif"]==0:
+  flash("Activez votre compte d'abord.","error")
+  return redirect(url_for("dashboard"))
+ conn=get_db()
+ c=conn.cursor()
+ if request.method=="POST":
+  montant=int(request.form.get("montant",0))
+  wallet=request.form.get("wallet","").strip()
+  if montant<1000:
+   flash("Montant minimum 1000 FCFA.","error")
+  elif montant>u["gains_total"]:
+   flash("Solde insuffisant.","error")
+  elif not wallet:
+   flash("Adresse wallet obligatoire.","error")
+  else:
+   c.execute("INSERT INTO retraits (user_id,montant,wallet,statut,date) VALUES (%s,%s,%s,'en_attente',%s)",(u["id"],montant,wallet,datetime.now().strftime("%Y-%m-%d %H:%M")))
+   c.execute("UPDATE users SET gains_total=gains_total-%s WHERE id=%s",(montant,u["id"]))
+   conn.commit()
+   flash("Demande de retrait soumise ! L'admin va traiter votre demande.","success")
+   return redirect(url_for("retrait"))
+ c.execute("SELECT * FROM retraits WHERE user_id=%s ORDER BY date DESC",(u["id"],))
+ retraits=c.fetchall()
+ conn.close()
+ return render_template("retrait.html",user=u,retraits=retraits)
 init_db()
 start_payment_checker(interval=60)
 if __name__=="__main__":
