@@ -598,3 +598,5 @@ def dashboard():
     filleuls = 3            # ou récupéré depuis la base
     
     return render_template('dashboard.html', user=user, gains=gains, filleuls=filleuls)
+import logging
+logging.basicConfig(level=logging.DEBUG)
