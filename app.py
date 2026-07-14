@@ -600,3 +600,6 @@ def dashboard():
     return render_template('dashboard.html', user=user, gains=gains, filleuls=filleuls)
 import logging
 logging.basicConfig(level=logging.DEBUG)
+@app.route('/test')
+def test():
+    return render_template('test.html', user="robama", gains=0, filleuls=3)
