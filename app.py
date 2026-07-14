@@ -159,10 +159,13 @@ def dashboard():
 
     return render_template("dashboard.html",
                            user=u["nom"],
-                           gains=u["gains_total"],
+           @app.route('/admin')
+def admin():
+    return "<h1>Page Admin</h1><p>Si vous voyez ceci, la route fonctionne !</p>"                gains=u["gains_total"],
                            filleuls=filleuls,
                            lien_parrainage=lien_parrainage,
                            matrice=matrice)   # <-- on envoie bien la matrice
+    
 
 if __name__ == "__main__":
     init_db()
