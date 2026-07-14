@@ -235,3 +235,39 @@ start_payment_checker(interval=60)
 if __name__=="__main__":
  port=int(os.environ.get("PORT",5000))
  app.run(host="0.0.0.0",port=port,debug=False)
+
+def check_and_pay_balance(user_id, seuil=5.00):
+    """
+    Vérifie si le solde de l'utilisateur atteint le seuil.
+    Si oui, envoie automatiquement le montant total sur son wallet.
+    Retourne True si paiement envoyé, False sinon.
+    """
+    user = User.query.get(user_id)  # Adaptez à votre modèle
+    if not user:
+        logger.error(f"❌ Utilisateur ID {user_id} introuvable.")
+        return False
+    
+    if user.gains < seuil:
+        logger.info(f"ℹ️ {user.email} | Solde: {user.gains}$ | Seuil: {seuil}$ - En attente.")
+        return False
+    
+    if not user.usdt_wallet or user.usdt_wallet == "":
+        logger.warning(f"⚠️ {user.email} a {user.gains}$ mais PAS de wallet USDT.")
+        return False
+    
+    amount_to_send = round(user.gains, 2)
+    logger.info(f"🚀 Paiement pour {user.email} | Montant: {amount_to_send}$")
+    
+    tx_hash = send_usdt_auto(user.usdt_wallet, amount_to_send)
+    
+    if tx_hash:
+        user.gains = 0.00
+        # Optionnel : log dans une table PaymentHistory
+        # history = PaymentHistory(user_id=user.id, amount=amount_to_send, tx_hash=tx_hash)
+        # db.session.add(history)
+        db.session.commit()
+        logger.info(f"✅ {amount_to_send}$ envoyé à {user.email}. Solde remis à 0.")
+        return True
+    else:
+        logger.error(f"❌ Échec du paiement pour {user.email}. Solde conservé.")
+        return False
