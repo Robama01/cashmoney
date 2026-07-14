@@ -586,3 +586,15 @@ start_payment_checker(interval=60)
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+from flask import Flask, render_template
+
+app = Flask(__name__)
+
+@app.route('/dashboard')
+def dashboard():
+    # Ici, vous remplacez ces valeurs par celles de votre base de données ou session
+    user = "robama"          # ou récupéré depuis la base
+    gains = 0               # ou récupéré depuis la base
+    filleuls = 3            # ou récupéré depuis la base
+    
+    return render_template('dashboard.html', user=user, gains=gains, filleuls=filleuls)
