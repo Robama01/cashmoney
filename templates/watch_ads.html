@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Regardez des vidéos - Gagnez des USDT</title>
+</head>
+<body>
+    <div class="container">
+        <h1>📺 Gagnez des USDT en regardant des vidéos</h1>
+        <p>Récompense par vidéo : <strong>{{ reward }} USDT</strong></p>
+        <p>Vidéos restantes aujourd'hui : <span id="remaining">{{ remaining }}</span></p>
+
+        <!-- Lecteur vidéo (ex: YouTube) -->
+        <div id="videoContainer">
+            <iframe id="videoPlayer" width="640" height="360" 
+                    src="https://www.youtube.com/embed/VIDEO_ID" 
+                    frameborder="0" allowfullscreen>
+            </iframe>
+        </div>
+        <button id="nextVideo" class="btn btn-primary">Vidéo suivante</button>
+        <button id="claimBtn" class="btn btn-success" style="display:none;">✅ Réclamer ma récompense</button>
+    </div>
+
+    <script>
+        const videos = ['VIDEO_ID_1', 'VIDEO_ID_2', 'VIDEO_ID_3']; // Remplacez par vos IDs YouTube
+        let currentIndex = 0;
+        const videoPlayer = document.getElementById('videoPlayer');
+        const claimBtn = document.getElementById('claimBtn');
+        const remainingSpan = document.getElementById('remaining');
+
+        function loadVideo(index) {
+            if (index >= videos.length) {
+                alert('Plus de vidéos disponibles pour le moment !');
+                return;
+            }
+            const videoId = videos[index];
+            videoPlayer.src = `https://www.youtube.com/embed/${videoId}?enablejsapi=1`;
+            claimBtn.style.display = 'none';
+            videoPlayer.style.display = 'block';
+            currentIndex = index;
+        }
+
+        // Détecter la fin de la vidéo (via l'API YouTube)
+        window.addEventListener('message', function(event) {
+            if (event.data === 'ended') {
+                claimBtn.style.display = 'block';
+            }
+        });
+
+        document.getElementById('nextVideo').addEventListener('click', function() {
+            loadVideo(currentIndex + 1);
+        });
+
+        claimBtn.addEventListener('click', function() {
+            fetch('/api/claim_ad_reward', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ video_id: videos[currentIndex] })
+            })
+            .then(response => response.json())
+            .then(data => {
+                alert(data.message);
+                if (data.success) {
+                    // Mettre à jour le compteur
+                    let remaining = parseInt(remainingSpan.innerText) - 1;
+                    remainingSpan.innerText = remaining;
+                    claimBtn.style.display = 'none';
+                    // Charger la vidéo suivante automatiquement
+                    loadVideo(currentIndex + 1);
+                }
+            });
+        });
+
+        // Charger la première vidéo
+        loadVideo(0);
+    </script>
+</body>
+</html>
