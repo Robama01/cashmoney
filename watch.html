@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mt-4">
+    <h2>📺 Regardez des pubs et gagnez des USDT</h2>
+    <p>Regardez les vidéos proposées ci-dessous. Vous serez crédité automatiquement après validation.</p>
+    
+    <!-- Intégration du widget Offerwall (ex: CPAGrip) -->
+    <div id="cpa-grip-widget">
+        <!-- Copiez le script fourni par votre réseau publicitaire ici -->
+        <!-- Exemple : <script src="https://cdn.cpagrip.com/..."></script> -->
+    </div>
+
+    <!-- Suivi des gains du jour (optionnel) -->
+    <div class="card mt-3">
+        <div class="card-body">
+            <h5>Vos gains du jour : <span id="dailyEarnings">{{ daily_earnings }}</span> USDT</h5>
+        </div>
+    </div>
+</div>
+{% endblock %}
