@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Test API cashmoney</title>
+<style>
+  body { font-family: sans-serif; max-width: 480px; margin: 20px auto; padding: 0 16px; background: #f5f5f7; }
+  h2 { margin-top: 32px; }
+  input, button { width: 100%; padding: 10px; margin: 6px 0; box-sizing: border-box; font-size: 16px; }
+  button { background: #6c47ff; color: white; border: none; border-radius: 6px; cursor: pointer; }
+  button:active { opacity: 0.8; }
+  pre { background: #222; color: #0f0; padding: 12px; border-radius: 6px; overflow-x: auto; white-space: pre-wrap; word-break: break-word; }
+  .section { background: white; padding: 16px; border-radius: 10px; margin-bottom: 16px; }
+</style>
+</head>
+<body>
+
+<h1>🔧 Test API cashmoney</h1>
+
+<div class="section">
+  <label>URL de ton API</label>
+  <input id="baseUrl" value="https://cashmoney-xjbs.onrender.com">
+</div>
+
+<div class="section">
+  <h2>Inscription</h2>
+  <input id="regEmail" placeholder="Email" value="test@example.com">
+  <input id="regPassword" type="password" placeholder="Mot de passe" value="motdepasse123">
+  <input id="regWallet" placeholder="Adresse wallet (optionnel)">
+  <button onclick="register()">S'inscrire</button>
+</div>
+
+<div class="section">
+  <h2>Connexion</h2>
+  <input id="loginEmail" placeholder="Email" value="test@example.com">
+  <input id="loginPassword" type="password" placeholder="Mot de passe" value="motdepasse123">
+  <button onclick="login()">Se connecter</button>
+</div>
+
+<div class="section">
+  <h2>Solde</h2>
+  <button onclick="getBalance()">Voir mon solde</button>
+</div>
+
+<div class="section">
+  <h2>Vidéos</h2>
+  <button onclick="listVideos()">Voir les vidéos</button>
+</div>
+
+<h2>Résultat</h2>
+<pre id="output">Les résultats s'afficheront ici...</pre>
+
+<script>
+let token = null;
+
+function show(data) {
+  document.getElementById("output").textContent = JSON.stringify(data, null, 2);
+}
+
+function baseUrl() {
+  return document.getElementById("baseUrl").value.replace(/\/$/, "");
+}
+
+async function register() {
+  const body = {
+    email: document.getElementById("regEmail").value,
+    password: document.getElementById("regPassword").value,
+    wallet_address: document.getElementById("regWallet").value || null
+  };
+  try {
+    const res = await fetch(baseUrl() + "/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (data.access_token) token = data.access_token;
+    show(data);
+  } catch (e) {
+    show({ error: e.message });
+  }
+}
+
+async function login() {
+  const body = {
+    email: document.getElementById("loginEmail").value,
+    password: document.getElementById("loginPassword").value
+  };
+  try {
+    const res = await fetch(baseUrl() + "/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (data.access_token) token = data.access_token;
+    show(data);
+  } catch (e) {
+    show({ error: e.message });
+  }
+}
+
+async function getBalance() {
+  if (!token) return show({ error: "Connecte-toi d'abord (Inscription ou Connexion)" });
+  try {
+    const res = await fetch(baseUrl() + "/balance", {
+      headers: { "Authorization": "Bearer " + token }
+    });
+    const data = await res.json();
+    show(data);
+  } catch (e) {
+    show({ error: e.message });
+  }
+}
+
+async function listVideos() {
+  try {
+    const res = await fetch(baseUrl() + "/videos");
+    const data = await res.json();
+    show(data);
+  } catch (e) {
+    show({ error: e.message });
+  }
+}
+</script>
+
+</body>
+</html>
