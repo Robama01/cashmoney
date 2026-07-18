@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-5">
+    <h2>💳 Paiement de l'adhésion</h2>
+    <div class="card">
+        <div class="card-body">
+            <h5 class="card-title">Montant à payer : <strong>{{ montant }} USDT</strong></h5>
+            <p class="card-text">Envoyez exactement ce montant sur l'adresse ci-dessous :</p>
+            
+            <div class="alert alert-info">
+                <strong>Adresse USDT (BEP-20) :</strong><br>
+                <code>{{ wallet }}</code>
+            </div>
+            
+            <p><strong>Référence :</strong> {{ ref }}</p>
+            
+            <div class="alert alert-warning">
+                ⚠️ Après avoir envoyé le paiement, cliquez sur le bouton ci-dessous pour vérifier.
+            </div>
+            
+            <form action="/check_payment" method="POST">
+                <input type="hidden" name="user_id" value="{{ user_id }}">
+                <input type="hidden" name="ref" value="{{ ref }}">
+                <button type="submit" class="btn btn-success">✅ Vérifier mon paiement</button>
+            </form>
+            
+            <hr>
+            
+            <p class="text-muted">⏳ La vérification peut prendre quelques minutes.</p>
+            
+            <!-- Bouton de test (pour simuler un paiement) -->
+            <a href="/test_pay/{{ user_id }}" class="btn btn-warning">🧪 Simuler un paiement (test)</a>
+        </div>
+    </div>
+</div>
+{% endblock %}
