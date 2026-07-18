@@ -1,28 +1,18 @@
+
 import os
-import sys
-from flask import Flask, render_template
+from flask import Flask
 
-print("🔍 Démarrage du script...")
+app = Flask(__name__)
 
-try:
-    app = Flask(__name__)
-    print("✅ Application Flask créée")
+@app.route("/")
+def index():
+    return "Bonjour ! Le serveur fonctionne."
 
-    @app.route("/")
-    def index():
-        try:
-            return render_template("index.html")
-        except Exception as e:
-            return f"<h1 style='color:red;'>ERREUR DANS LE TEMPLATE</h1><pre>{str(e)}</pre>"
+@app.route("/hello")
+def hello():
+    return "Salut ! La route /hello est OK."
 
-    @app.route("/hello")
-    def hello():
-        return "Salut ! La route /hello est OK."
-
-    print("✅ Routes définies")
-
-except Exception as e:
-    print(f"❌ ERREUR LORS DE LA CRÉATION : {e}")
-    sys.exit(1)
-
-# Pas de if __name__ == "__main__" pour Render
+# ⚠️ CE BLOC EST ESSENTIEL POUR python app.py
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port, debug=False)
