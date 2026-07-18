@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <h1>👋 Bienvenue {{ user }}</h1>
+    
+    <div class="row">
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <h5>💰 Solde</h5>
+                    <p class="display-4">{{ balance }} USDT</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <h5>👥 Filleuls actifs</h5>
+                    <p class="display-4">{{ filleuls }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <h5>📊 Gains totaux</h5>
+                    <p class="display-4">{{ gains }} USDT</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <h5>🔓 Statut</h5>
+                    <p class="display-4">{% if actif %}✅ Actif{% else %}❌ Inactif{% endif %}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <hr>
+
+    <h4>🔗 Lien de parrainage</h4>
+    <input type="text" class="form-control" value="{{ lien_parrainage }}" readonly>
+
+    <hr>
+
+    <h4>📊 Matrice des filleuls (12 niveaux)</h4>
+    <ul class="list-group">
+        {% for niveau, count in matrice.items() %}
+            <li class="list-group-item">Niveau {{ niveau }} : {{ count }} personne(s)</li>
+        {% endfor %}
+    </ul>
+
+    <div class="mt-3">
+        <a href="/depot" class="btn btn-success">💳 Payer l'adhésion</a>
+        <a href="/watch-ads" class="btn btn-primary">📺 Regarder des vidéos</a>
+        <a href="/logout" class="btn btn-danger">🚪 Déconnexion</a>
+    </div>
+</div>
+{% endblock %}
