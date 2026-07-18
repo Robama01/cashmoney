@@ -1,15 +1,28 @@
-
 import os
+import sys
 from flask import Flask, render_template
 
-app = Flask(__name__)
+print("🔍 Démarrage du script...")
 
-@app.route("/")
-def index():
-    return render_template("index.html")
+try:
+    app = Flask(__name__)
+    print("✅ Application Flask créée")
 
-@app.route("/hello")
-def hello():
-    return "Salut ! La route /hello est OK."
+    @app.route("/")
+    def index():
+        try:
+            return render_template("index.html")
+        except Exception as e:
+            return f"<h1 style='color:red;'>ERREUR DANS LE TEMPLATE</h1><pre>{str(e)}</pre>"
 
-# Pour Render, on n'a pas besoin de if __name__ == "__main__"
+    @app.route("/hello")
+    def hello():
+        return "Salut ! La route /hello est OK."
+
+    print("✅ Routes définies")
+
+except Exception as e:
+    print(f"❌ ERREUR LORS DE LA CRÉATION : {e}")
+    sys.exit(1)
+
+# Pas de if __name__ == "__main__" pour Render
