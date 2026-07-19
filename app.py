@@ -159,6 +159,12 @@ def init_db():
             created_at TIMESTAMP DEFAULT NOW()
         );
     """)
+
+    # Migrations : ajoute les colonnes manquantes si la table existait déjà avant cette version
+    cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS wallet_address TEXT;")
+    cur.execute("ALTER TABLE payouts ADD COLUMN IF NOT EXISTS tx_hash TEXT;")
+    cur.execute("ALTER TABLE payouts ADD COLUMN IF NOT EXISTS error_message TEXT;")
+
     conn.commit()
     cur.close()
     conn.close()
@@ -200,7 +206,7 @@ def register():
         cur.close()
         conn.close()
 
-    token = create_access_token(identity=user["id"])
+    token = create_access_token(identity=str(user["id"]))
     return jsonify({"user": user, "access_token": token}), 201
 
 
@@ -223,7 +229,7 @@ def login():
     if not user or not bcrypt.checkpw(password.encode(), user["password_hash"].encode()):
         return jsonify({"error": "Email ou mot de passe incorrect"}), 401
 
-    token = create_access_token(identity=user["id"])
+    token = create_access_token(identity=str(user["id"]))
     return jsonify({"access_token": token, "balance": float(user["balance"])})
 
 
@@ -278,7 +284,7 @@ def add_video():
 @app.route("/watch", methods=["POST"])
 @jwt_required()
 def watch_video():
-    user_id = get_jwt_identity()
+    user_id = int(get_jwt_identity())
     data = request.get_json(silent=True) or {}
 
     try:
@@ -366,12 +372,14 @@ def trigger_payout(cur, user_id, amount):
             "INSERT INTO payouts (user_id, amount, status, tx_hash) VALUES (%s, %s, 'sent', %s);",
             (user_id, amount, result)
         )
+        # Solde remis à zéro uniquement si l'envoi a réussi
         cur.execute("UPDATE users SET balance = 0 WHERE id = %s;", (user_id,))
     else:
         cur.execute(
             "INSERT INTO payouts (user_id, amount, status, error_message) VALUES (%s, %s, 'failed', %s);",
             (user_id, amount, result)
         )
+        # Le solde N'EST PAS remis à zéro si l'envoi a échoué (l'utilisateur garde son droit au paiement)
 
 
 # ---------- SOLDE & HISTORIQUE ----------
@@ -379,7 +387,7 @@ def trigger_payout(cur, user_id, amount):
 @app.route("/balance", methods=["GET"])
 @jwt_required()
 def get_balance():
-    user_id = get_jwt_identity()
+    user_id = int(get_jwt_identity())
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("SELECT balance FROM users WHERE id = %s;", (user_id,))
@@ -392,7 +400,7 @@ def get_balance():
 @app.route("/payouts", methods=["GET"])
 @jwt_required()
 def list_payouts():
-    user_id = get_jwt_identity()
+    user_id = int(get_jwt_identity())
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("SELECT * FROM payouts WHERE user_id = %s ORDER BY created_at DESC;", (user_id,))
