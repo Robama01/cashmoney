@@ -153,6 +153,11 @@ def _create_tables(cur):
         );
     """)
 
+    # Migrations : ajoute les colonnes manquantes si la table existait déjà avant cette version
+    cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS wallet_address TEXT;")
+    cur.execute("ALTER TABLE payouts ADD COLUMN IF NOT EXISTS tx_hash TEXT;")
+    cur.execute("ALTER TABLE payouts ADD COLUMN IF NOT EXISTS error_message TEXT;")
+
 
 # ---------- AUTHENTIFICATION ----------
 
@@ -362,9 +367,11 @@ def trigger_payout(cur, user_id, amount):
             "INSERT INTO payouts (user_id, amount, status, tx_hash) VALUES (%s, %s, 'sent', %s);",
             (user_id, amount, result)
         )
+        # Solde remis à zéro uniquement si l'envoi a réussi
         cur.execute("UPDATE users SET balance = 0 WHERE id = %s;", (user_id,))
         return True
 
+    # Le solde N'EST PAS remis à zéro si l'envoi a échoué (l'utilisateur garde son droit au paiement)
     logger.error("Payout echoue pour l'utilisateur %s : %s", user_id, result)
     cur.execute(
         "INSERT INTO payouts (user_id, amount, status, error_message) VALUES (%s, %s, 'failed', %s);",
