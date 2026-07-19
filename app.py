@@ -159,7 +159,7 @@ def register():
     except psycopg2.errors.UniqueViolation:
         return jsonify({"error": "Cet email est déjà utilisé"}), 409
 
-    token = create_access_token(identity=user["id"])
+    token = create_access_token(identity=str(user["id"]))
     return jsonify({"user": user, "access_token": token}), 201
 
 
@@ -176,7 +176,7 @@ def login():
     if not user or not bcrypt.checkpw(password.encode(), user["password_hash"].encode()):
         return jsonify({"error": "Email ou mot de passe incorrect"}), 401
 
-    token = create_access_token(identity=user["id"])
+    token = create_access_token(identity=str(user["id"]))
     return jsonify({"access_token": token, "balance": float(user["balance"])})
 
 
@@ -210,7 +210,7 @@ def add_video():
 @app.route("/watch", methods=["POST"])
 @jwt_required()
 def watch_video():
-    user_id = get_jwt_identity()
+    user_id = int(get_jwt_identity())
     data = request.get_json()
     video_id = data.get("video_id")
     watched_seconds = data.get("watched_seconds", 0)
@@ -295,7 +295,7 @@ def trigger_payout(cur, user_id, amount):
 @app.route("/balance", methods=["GET"])
 @jwt_required()
 def get_balance():
-    user_id = get_jwt_identity()
+    user_id = int(get_jwt_identity())
     with db_cursor() as cur:
         cur.execute("SELECT balance FROM users WHERE id = %s;", (user_id,))
         user = cur.fetchone()
@@ -305,7 +305,7 @@ def get_balance():
 @app.route("/payouts", methods=["GET"])
 @jwt_required()
 def list_payouts():
-    user_id = get_jwt_identity()
+    user_id = int(get_jwt_identity())
     with db_cursor() as cur:
         cur.execute("SELECT * FROM payouts WHERE user_id = %s ORDER BY created_at DESC;", (user_id,))
         payouts = cur.fetchall()
