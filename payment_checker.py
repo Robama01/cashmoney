@@ -5,15 +5,21 @@ import time
 import threading
 from datetime import datetime
 
+from constants import USDT_BEP20_CONTRACT as USDT_CONTRACT, USDT_DECIMALS
+
 # Configuration
 BSCSCAN_API_KEY = os.environ.get("BSCSCAN_API_KEY", "S9HISBH8HYBRTP6Y38ZFVDQKG34M6MQNYU")
 WALLET_USDT = os.environ.get("WALLET_USDT", "0xE4901E78F8c92199bAfD93AD87C5a250C48199c2")
-USDT_CONTRACT = "0x55d398326f99059fF775485246999027B3197955"  # USDT BEP20
 MEMBERSHIP_USDT = 0.35
-USDT_DECIMALS = 18
 
 DB_PATH = "cashmoney.db"
+
+
 GAINS_NIVEAU = [2000, 1000, 2000, 1000, 2000, 1000, 2000, 1000, 2000, 1000, 2000, 1000]
+
+
+def _now():
+    return datetime.now().strftime("%Y-%m-%d %H:%M")
 
 
 def get_db():
@@ -96,7 +102,7 @@ def distribuer_commissions(nouveau_user_id):
         conn.execute("""
             INSERT INTO commissions (beneficiaire_id, source_id, niveau, montant, date)
             VALUES (?, ?, ?, ?, ?)
-        """, (parrain_id, nouveau_user_id, i + 1, montant, datetime.now().strftime("%Y-%m-%d %H:%M")))
+        """, (parrain_id, nouveau_user_id, i + 1, montant, _now()))
         conn.execute("UPDATE users SET gains_total = gains_total + ? WHERE id=?", (montant, parrain_id))
     conn.commit()
     conn.close()
@@ -108,7 +114,7 @@ def activer_compte(user_id, tx_hash, montant_usdt):
     conn.execute("""
         UPDATE paiements SET statut='confirme', tx_hash=?, date_confirmation=?
         WHERE user_id=? AND statut='en_attente'
-    """, (tx_hash, datetime.now().strftime("%Y-%m-%d %H:%M"), user_id))
+    """, (tx_hash, _now(), user_id))
     conn.commit()
     conn.close()
     distribuer_commissions(user_id)
@@ -153,7 +159,7 @@ def check_payments():
             conn.execute("""
                 INSERT OR IGNORE INTO paiements (user_id, montant, statut, tx_hash, date)
                 VALUES (0, ?, 'non_associe', ?, ?)
-            """, (montant_usdt, tx_hash, datetime.now().strftime("%Y-%m-%d %H:%M")))
+            """, (montant_usdt, tx_hash, _now()))
             conn.commit()
             conn.close()
             print(f"[WARN] Transaction non associee: {tx_hash}")
