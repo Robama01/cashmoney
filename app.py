@@ -1,4 +1,8 @@
 import os
+import hmac
+import secrets
+from functools import wraps
+
 import bcrypt
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -73,12 +77,35 @@ app = Flask(__name__)
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
-# Change cette clé secrète sur Render (variable JWT_SECRET_KEY), ne la laisse jamais en dur en prod
-app.config["JWT_SECRET_KEY"] = os.environ.get("JWT_SECRET_KEY", "change-moi-absolument")
+# La clé JWT DOIT venir de l'environnement (variable JWT_SECRET_KEY). Aucune valeur
+# par défaut connue n'est utilisée : un secret prévisible permettrait de forger des
+# jetons et de prendre le contrôle de n'importe quel compte. En l'absence de config,
+# on génère un secret aléatoire éphémère (les jetons sont invalidés au redémarrage).
+JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY")
+if not JWT_SECRET_KEY:
+    print("[WARN] JWT_SECRET_KEY non configurée : génération d'un secret aléatoire éphémère. "
+          "Définis JWT_SECRET_KEY en production.")
+    JWT_SECRET_KEY = secrets.token_hex(32)
+app.config["JWT_SECRET_KEY"] = JWT_SECRET_KEY
 jwt = JWTManager(app)
+
+# Clé d'administration requise pour les endpoints privilégiés (ex: ajout de vidéos).
+ADMIN_API_KEY = os.environ.get("ADMIN_API_KEY")
 
 # Seuil de retrait automatique (en FCFA, ou l'unité que tu utilises)
 WITHDRAWAL_THRESHOLD = float(os.environ.get("WITHDRAWAL_THRESHOLD", 1000))
+
+
+def admin_required(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        if not ADMIN_API_KEY:
+            return jsonify({"error": "Endpoint admin désactivé (ADMIN_API_KEY non configurée)"}), 503
+        provided = request.headers.get("X-Admin-Key", "")
+        if not hmac.compare_digest(provided, ADMIN_API_KEY):
+            return jsonify({"error": "Accès admin refusé"}), 403
+        return fn(*args, **kwargs)
+    return wrapper
 
 
 def get_connection():
@@ -147,13 +174,16 @@ def init_db():
 
 @app.route("/register", methods=["POST"])
 def register():
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     email = data.get("email")
     password = data.get("password")
     wallet_address = data.get("wallet_address")
 
     if not email or not password:
         return jsonify({"error": "email et password requis"}), 400
+
+    if not isinstance(password, str) or len(password) < 8:
+        return jsonify({"error": "password doit contenir au moins 8 caractères"}), 400
 
     if wallet_address and not Web3.is_address(wallet_address):
         return jsonify({"error": "wallet_address invalide (doit être une adresse BEP20 valide)"}), 400
@@ -182,9 +212,12 @@ def register():
 
 @app.route("/login", methods=["POST"])
 def login():
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     email = data.get("email")
     password = data.get("password")
+
+    if not email or not password:
+        return jsonify({"error": "email et password requis"}), 400
 
     conn = get_connection()
     cur = conn.cursor()
@@ -214,16 +247,30 @@ def list_videos():
 
 
 @app.route("/videos", methods=["POST"])
+@admin_required
 def add_video():
-    # ⚠️ À sécuriser plus tard avec un rôle "admin" avant la mise en production
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
+
+    youtube_id = data.get("youtube_id")
+    title = data.get("title")
+    if not youtube_id or not title:
+        return jsonify({"error": "youtube_id et title sont requis"}), 400
+
+    try:
+        reward_amount = float(data.get("reward_amount"))
+        min_watch_seconds = int(data.get("min_watch_seconds", 30))
+    except (TypeError, ValueError):
+        return jsonify({"error": "reward_amount et min_watch_seconds doivent être numériques"}), 400
+
+    if reward_amount <= 0 or min_watch_seconds <= 0:
+        return jsonify({"error": "reward_amount et min_watch_seconds doivent être positifs"}), 400
+
     conn = get_connection()
     cur = conn.cursor()
     cur.execute(
         """INSERT INTO videos (youtube_id, title, sponsor_name, reward_amount, min_watch_seconds)
            VALUES (%s, %s, %s, %s, %s) RETURNING *;""",
-        (data.get("youtube_id"), data.get("title"), data.get("sponsor_name"),
-         data.get("reward_amount"), data.get("min_watch_seconds", 30))
+        (youtube_id, title, data.get("sponsor_name"), reward_amount, min_watch_seconds)
     )
     video = cur.fetchone()
     conn.commit()
@@ -238,9 +285,16 @@ def add_video():
 @jwt_required()
 def watch_video():
     user_id = int(get_jwt_identity())
-    data = request.get_json()
-    video_id = data.get("video_id")
-    watched_seconds = data.get("watched_seconds", 0)
+    data = request.get_json(silent=True) or {}
+
+    try:
+        video_id = int(data.get("video_id"))
+        watched_seconds = int(data.get("watched_seconds", 0))
+    except (TypeError, ValueError):
+        return jsonify({"error": "video_id et watched_seconds doivent être des entiers"}), 400
+
+    if watched_seconds < 0:
+        return jsonify({"error": "watched_seconds invalide"}), 400
 
     conn = get_connection()
     cur = conn.cursor()
