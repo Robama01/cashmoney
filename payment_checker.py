@@ -6,8 +6,8 @@ import threading
 from datetime import datetime
 
 # Configuration
-BSCSCAN_API_KEY = os.environ.get("BSCSCAN_API_KEY", "S9HISBH8HYBRTP6Y38ZFVDQKG34M6MQNYU")
-WALLET_USDT = os.environ.get("WALLET_USDT", "0xE4901E78F8c92199bAfD93AD87C5a250C48199c2")
+BSCSCAN_API_KEY = os.environ.get("BSCSCAN_API_KEY")
+WALLET_USDT = os.environ.get("WALLET_USDT")
 USDT_CONTRACT = "0x55d398326f99059fF775485246999027B3197955"  # USDT BEP20
 MEMBERSHIP_USDT = 0.35
 USDT_DECIMALS = 18
@@ -23,6 +23,9 @@ def get_db():
 
 
 def get_recent_usdt_transactions():
+    if not BSCSCAN_API_KEY or not WALLET_USDT:
+        print("[BscScan] BSCSCAN_API_KEY et WALLET_USDT doivent etre configures via l'environnement")
+        return []
     url = "https://api.bscscan.com/api"
     params = {
         "module": "account",
