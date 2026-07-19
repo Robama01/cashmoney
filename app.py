@@ -1,3 +1,4 @@
+import logging
 import os
 import bcrypt
 import psycopg2
@@ -31,6 +32,9 @@ ERC20_ABI = [
         "type": "function"
     }
 ]
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 w3 = Web3(Web3.HTTPProvider(BSC_RPC_URL))
 usdt_contract = w3.eth.contract(address=Web3.to_checksum_address(USDT_BEP20_CONTRACT), abi=ERC20_ABI)
@@ -67,6 +71,9 @@ def send_usdt_bep20(to_address: str, amount_usdt: float):
         return True, tx_hash.hex()
 
     except Exception as e:
+        # On journalise l'erreur complète (stack trace) au lieu de la faire
+        # disparaître silencieusement dans une simple chaîne de caractères.
+        logger.exception("Echec de l'envoi USDT BEP20 vers %s", to_address)
         return False, str(e)
 
 app = Flask(__name__)
@@ -88,6 +95,19 @@ def get_connection():
 def init_db():
     conn = get_connection()
     cur = conn.cursor()
+    try:
+        _create_tables(cur)
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        logger.exception("Echec de l'initialisation de la base de donnees")
+        raise
+    finally:
+        cur.close()
+        conn.close()
+
+
+def _create_tables(cur):
     cur.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id SERIAL PRIMARY KEY,
@@ -138,16 +158,15 @@ def init_db():
     cur.execute("ALTER TABLE payouts ADD COLUMN IF NOT EXISTS tx_hash TEXT;")
     cur.execute("ALTER TABLE payouts ADD COLUMN IF NOT EXISTS error_message TEXT;")
 
-    conn.commit()
-    cur.close()
-    conn.close()
-
 
 # ---------- AUTHENTIFICATION ----------
 
 @app.route("/register", methods=["POST"])
 def register():
-    data = request.get_json()
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "Corps de requête JSON invalide ou manquant"}), 400
+
     email = data.get("email")
     password = data.get("password")
     wallet_address = data.get("wallet_address")
@@ -172,6 +191,10 @@ def register():
     except psycopg2.errors.UniqueViolation:
         conn.rollback()
         return jsonify({"error": "Cet email est déjà utilisé"}), 409
+    except Exception:
+        conn.rollback()
+        logger.exception("Echec de l'inscription pour %s", email)
+        return jsonify({"error": "Erreur interne lors de l'inscription"}), 500
     finally:
         cur.close()
         conn.close()
@@ -182,16 +205,24 @@ def register():
 
 @app.route("/login", methods=["POST"])
 def login():
-    data = request.get_json()
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "Corps de requête JSON invalide ou manquant"}), 400
+
     email = data.get("email")
     password = data.get("password")
 
+    if not email or not password:
+        return jsonify({"error": "email et password requis"}), 400
+
     conn = get_connection()
     cur = conn.cursor()
-    cur.execute("SELECT * FROM users WHERE email = %s;", (email,))
-    user = cur.fetchone()
-    cur.close()
-    conn.close()
+    try:
+        cur.execute("SELECT * FROM users WHERE email = %s;", (email,))
+        user = cur.fetchone()
+    finally:
+        cur.close()
+        conn.close()
 
     if not user or not bcrypt.checkpw(password.encode(), user["password_hash"].encode()):
         return jsonify({"error": "Email ou mot de passe incorrect"}), 401
@@ -206,29 +237,43 @@ def login():
 def list_videos():
     conn = get_connection()
     cur = conn.cursor()
-    cur.execute("SELECT * FROM videos WHERE active = TRUE ORDER BY created_at DESC;")
-    videos = cur.fetchall()
-    cur.close()
-    conn.close()
+    try:
+        cur.execute("SELECT * FROM videos WHERE active = TRUE ORDER BY created_at DESC;")
+        videos = cur.fetchall()
+    finally:
+        cur.close()
+        conn.close()
     return jsonify(videos)
 
 
 @app.route("/videos", methods=["POST"])
 def add_video():
     # ⚠️ À sécuriser plus tard avec un rôle "admin" avant la mise en production
-    data = request.get_json()
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "Corps de requête JSON invalide ou manquant"}), 400
+
+    if not data.get("youtube_id") or not data.get("title") or data.get("reward_amount") is None:
+        return jsonify({"error": "youtube_id, title et reward_amount sont requis"}), 400
+
     conn = get_connection()
     cur = conn.cursor()
-    cur.execute(
-        """INSERT INTO videos (youtube_id, title, sponsor_name, reward_amount, min_watch_seconds)
-           VALUES (%s, %s, %s, %s, %s) RETURNING *;""",
-        (data.get("youtube_id"), data.get("title"), data.get("sponsor_name"),
-         data.get("reward_amount"), data.get("min_watch_seconds", 30))
-    )
-    video = cur.fetchone()
-    conn.commit()
-    cur.close()
-    conn.close()
+    try:
+        cur.execute(
+            """INSERT INTO videos (youtube_id, title, sponsor_name, reward_amount, min_watch_seconds)
+               VALUES (%s, %s, %s, %s, %s) RETURNING *;""",
+            (data.get("youtube_id"), data.get("title"), data.get("sponsor_name"),
+             data.get("reward_amount"), data.get("min_watch_seconds", 30))
+        )
+        video = cur.fetchone()
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        logger.exception("Echec de l'ajout d'une video")
+        return jsonify({"error": "Erreur interne lors de l'ajout de la video"}), 500
+    finally:
+        cur.close()
+        conn.close()
     return jsonify(video), 201
 
 
@@ -238,60 +283,63 @@ def add_video():
 @jwt_required()
 def watch_video():
     user_id = int(get_jwt_identity())
-    data = request.get_json()
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "Corps de requête JSON invalide ou manquant"}), 400
+
     video_id = data.get("video_id")
     watched_seconds = data.get("watched_seconds", 0)
 
     conn = get_connection()
     cur = conn.cursor()
-
-    cur.execute("SELECT * FROM videos WHERE id = %s AND active = TRUE;", (video_id,))
-    video = cur.fetchone()
-    if not video:
-        cur.close()
-        conn.close()
-        return jsonify({"error": "Vidéo introuvable"}), 404
-
-    if watched_seconds < video["min_watch_seconds"]:
-        cur.close()
-        conn.close()
-        return jsonify({
-            "error": f"Il faut regarder au moins {video['min_watch_seconds']} secondes"
-        }), 400
-
     try:
+        cur.execute("SELECT * FROM videos WHERE id = %s AND active = TRUE;", (video_id,))
+        video = cur.fetchone()
+        if not video:
+            return jsonify({"error": "Vidéo introuvable"}), 404
+
+        if watched_seconds < video["min_watch_seconds"]:
+            return jsonify({
+                "error": f"Il faut regarder au moins {video['min_watch_seconds']} secondes"
+            }), 400
+
+        try:
+            cur.execute(
+                """INSERT INTO watch_logs (user_id, video_id, watched_seconds, reward_given)
+                   VALUES (%s, %s, %s, %s);""",
+                (user_id, video_id, watched_seconds, video["reward_amount"])
+            )
+        except psycopg2.errors.UniqueViolation:
+            conn.rollback()
+            return jsonify({"error": "Tu as déjà été récompensé pour cette vidéo"}), 409
+
         cur.execute(
-            """INSERT INTO watch_logs (user_id, video_id, watched_seconds, reward_given)
-               VALUES (%s, %s, %s, %s);""",
-            (user_id, video_id, watched_seconds, video["reward_amount"])
+            "UPDATE users SET balance = balance + %s WHERE id = %s RETURNING balance;",
+            (video["reward_amount"], user_id)
         )
-    except psycopg2.errors.UniqueViolation:
+        new_balance = cur.fetchone()["balance"]
+        conn.commit()
+
+        # Déclenche un retrait automatique si le seuil est atteint
+        payout_triggered = False
+        payout_succeeded = False
+        if float(new_balance) >= WITHDRAWAL_THRESHOLD:
+            payout_succeeded = trigger_payout(cur, user_id, float(new_balance))
+            conn.commit()
+            payout_triggered = True
+    except Exception:
         conn.rollback()
+        logger.exception("Echec du traitement du visionnage (user=%s, video=%s)", user_id, video_id)
+        return jsonify({"error": "Erreur interne lors du traitement du visionnage"}), 500
+    finally:
         cur.close()
         conn.close()
-        return jsonify({"error": "Tu as déjà été récompensé pour cette vidéo"}), 409
-
-    cur.execute(
-        "UPDATE users SET balance = balance + %s WHERE id = %s RETURNING balance;",
-        (video["reward_amount"], user_id)
-    )
-    new_balance = cur.fetchone()["balance"]
-    conn.commit()
-
-    # Déclenche un retrait automatique si le seuil est atteint
-    payout_triggered = False
-    if float(new_balance) >= WITHDRAWAL_THRESHOLD:
-        trigger_payout(cur, user_id, float(new_balance))
-        conn.commit()
-        payout_triggered = True
-
-    cur.close()
-    conn.close()
 
     return jsonify({
         "reward_given": float(video["reward_amount"]),
         "new_balance": float(new_balance),
-        "payout_triggered": payout_triggered
+        "payout_triggered": payout_triggered,
+        "payout_succeeded": payout_succeeded
     })
 
 
@@ -305,11 +353,12 @@ def trigger_payout(cur, user_id, amount):
     wallet_address = user["wallet_address"] if user else None
 
     if not wallet_address:
+        logger.warning("Payout impossible : aucune adresse wallet pour l'utilisateur %s", user_id)
         cur.execute(
             "INSERT INTO payouts (user_id, amount, status, error_message) VALUES (%s, %s, 'failed', %s);",
             (user_id, amount, "Aucune adresse wallet enregistrée pour cet utilisateur")
         )
-        return
+        return False
 
     success, result = send_usdt_bep20(wallet_address, amount)
 
@@ -320,12 +369,15 @@ def trigger_payout(cur, user_id, amount):
         )
         # Solde remis à zéro uniquement si l'envoi a réussi
         cur.execute("UPDATE users SET balance = 0 WHERE id = %s;", (user_id,))
-    else:
-        cur.execute(
-            "INSERT INTO payouts (user_id, amount, status, error_message) VALUES (%s, %s, 'failed', %s);",
-            (user_id, amount, result)
-        )
-        # Le solde N'EST PAS remis à zéro si l'envoi a échoué (l'utilisateur garde son droit au paiement)
+        return True
+
+    # Le solde N'EST PAS remis à zéro si l'envoi a échoué (l'utilisateur garde son droit au paiement)
+    logger.error("Payout echoue pour l'utilisateur %s : %s", user_id, result)
+    cur.execute(
+        "INSERT INTO payouts (user_id, amount, status, error_message) VALUES (%s, %s, 'failed', %s);",
+        (user_id, amount, result)
+    )
+    return False
 
 
 # ---------- SOLDE & HISTORIQUE ----------
@@ -336,10 +388,15 @@ def get_balance():
     user_id = int(get_jwt_identity())
     conn = get_connection()
     cur = conn.cursor()
-    cur.execute("SELECT balance FROM users WHERE id = %s;", (user_id,))
-    user = cur.fetchone()
-    cur.close()
-    conn.close()
+    try:
+        cur.execute("SELECT balance FROM users WHERE id = %s;", (user_id,))
+        user = cur.fetchone()
+    finally:
+        cur.close()
+        conn.close()
+
+    if not user:
+        return jsonify({"error": "Utilisateur introuvable"}), 404
     return jsonify({"balance": float(user["balance"])})
 
 
@@ -349,10 +406,12 @@ def list_payouts():
     user_id = int(get_jwt_identity())
     conn = get_connection()
     cur = conn.cursor()
-    cur.execute("SELECT * FROM payouts WHERE user_id = %s ORDER BY created_at DESC;", (user_id,))
-    payouts = cur.fetchall()
-    cur.close()
-    conn.close()
+    try:
+        cur.execute("SELECT * FROM payouts WHERE user_id = %s ORDER BY created_at DESC;", (user_id,))
+        payouts = cur.fetchall()
+    finally:
+        cur.close()
+        conn.close()
     return jsonify(payouts)
 
 
