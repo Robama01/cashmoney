@@ -128,6 +128,8 @@ def init_db():
 
         # Migrations : ajoute les colonnes manquantes si la table existait déjà avant cette version
         cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS wallet_address TEXT;")
+        cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS balance NUMERIC DEFAULT 0;")
+        cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW();")
         cur.execute("ALTER TABLE payouts ADD COLUMN IF NOT EXISTS tx_hash TEXT;")
         cur.execute("ALTER TABLE payouts ADD COLUMN IF NOT EXISTS error_message TEXT;")
 
