@@ -1,9 +1,13 @@
+import logging
 import os
 import sqlite3
 import requests
 import time
 import threading
 from datetime import datetime
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Configuration
 BSCSCAN_API_KEY = os.environ.get("BSCSCAN_API_KEY", "S9HISBH8HYBRTP6Y38ZFVDQKG34M6MQNYU")
@@ -36,13 +40,26 @@ def get_recent_usdt_transactions():
     }
     try:
         r = requests.get(url, params=params, timeout=10)
+        r.raise_for_status()
         data = r.json()
-        if data["status"] == "1":
-            return data["result"]
+    except requests.RequestException:
+        logger.exception("[BscScan] Echec de la requete HTTP")
         return []
-    except Exception as e:
-        print(f"[BscScan] Erreur: {e}")
+    except ValueError:
+        logger.exception("[BscScan] Reponse JSON invalide")
         return []
+
+    # L'API BscScan renvoie status "1" en cas de succes. Tout autre statut
+    # (ex: rate limit, cle invalide, aucune transaction) doit etre journalise
+    # au lieu d'etre avale silencieusement.
+    if data.get("status") == "1":
+        return data.get("result", [])
+
+    logger.warning(
+        "[BscScan] Reponse inattendue: status=%s message=%s",
+        data.get("status"), data.get("message") or data.get("result"),
+    )
+    return []
 
 
 def is_tx_already_processed(tx_hash):
@@ -78,85 +95,118 @@ def get_pending_payments_unmatched():
 
 def distribuer_commissions(nouveau_user_id):
     conn = get_db()
-    current_id = nouveau_user_id
-    chain = []
-    for _ in range(12):
-        row = conn.execute("SELECT parrain_id FROM users WHERE id=?", (current_id,)).fetchone()
-        if not row or not row["parrain_id"]:
-            break
-        parrain = conn.execute("SELECT id, actif FROM users WHERE id=?", (row["parrain_id"],)).fetchone()
-        if parrain and parrain["actif"] == 1:
-            chain.append(parrain["id"])
-        current_id = row["parrain_id"]
+    try:
+        current_id = nouveau_user_id
+        chain = []
+        for _ in range(12):
+            row = conn.execute("SELECT parrain_id FROM users WHERE id=?", (current_id,)).fetchone()
+            if not row or not row["parrain_id"]:
+                break
+            parrain = conn.execute("SELECT id, actif FROM users WHERE id=?", (row["parrain_id"],)).fetchone()
+            if parrain and parrain["actif"] == 1:
+                chain.append(parrain["id"])
+            current_id = row["parrain_id"]
 
-    for i, parrain_id in enumerate(chain):
-        if i >= len(GAINS_NIVEAU):
-            break
-        montant = GAINS_NIVEAU[i]
-        conn.execute("""
-            INSERT INTO commissions (beneficiaire_id, source_id, niveau, montant, date)
-            VALUES (?, ?, ?, ?, ?)
-        """, (parrain_id, nouveau_user_id, i + 1, montant, datetime.now().strftime("%Y-%m-%d %H:%M")))
-        conn.execute("UPDATE users SET gains_total = gains_total + ? WHERE id=?", (montant, parrain_id))
-    conn.commit()
-    conn.close()
+        for i, parrain_id in enumerate(chain):
+            if i >= len(GAINS_NIVEAU):
+                break
+            montant = GAINS_NIVEAU[i]
+            conn.execute("""
+                INSERT INTO commissions (beneficiaire_id, source_id, niveau, montant, date)
+                VALUES (?, ?, ?, ?, ?)
+            """, (parrain_id, nouveau_user_id, i + 1, montant, datetime.now().strftime("%Y-%m-%d %H:%M")))
+            conn.execute("UPDATE users SET gains_total = gains_total + ? WHERE id=?", (montant, parrain_id))
+        conn.commit()
+    except Exception:
+        # Sans rollback, une erreur en cours de distribution laisserait des
+        # commissions partiellement inscrites. On annule et on propage.
+        conn.rollback()
+        logger.exception("Echec de la distribution des commissions (user=%s)", nouveau_user_id)
+        raise
+    finally:
+        conn.close()
 
 
 def activer_compte(user_id, tx_hash, montant_usdt):
     conn = get_db()
-    conn.execute("UPDATE users SET actif=1 WHERE id=?", (user_id,))
-    conn.execute("""
-        UPDATE paiements SET statut='confirme', tx_hash=?, date_confirmation=?
-        WHERE user_id=? AND statut='en_attente'
-    """, (tx_hash, datetime.now().strftime("%Y-%m-%d %H:%M"), user_id))
-    conn.commit()
-    conn.close()
+    try:
+        conn.execute("UPDATE users SET actif=1 WHERE id=?", (user_id,))
+        conn.execute("""
+            UPDATE paiements SET statut='confirme', tx_hash=?, date_confirmation=?
+            WHERE user_id=? AND statut='en_attente'
+        """, (tx_hash, datetime.now().strftime("%Y-%m-%d %H:%M"), user_id))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        logger.exception("Echec de l'activation du compte %s (tx=%s)", user_id, tx_hash)
+        raise
+    finally:
+        conn.close()
     distribuer_commissions(user_id)
-    print(f"[OK] Compte {user_id} active | TX: {tx_hash} | {montant_usdt} USDT")
+    logger.info("[OK] Compte %s active | TX: %s | %s USDT", user_id, tx_hash, montant_usdt)
 
 
 def check_payments():
-    print(f"[Checker] Verification... {datetime.now().strftime('%H:%M:%S')}")
+    logger.info("[Checker] Verification... %s", datetime.now().strftime('%H:%M:%S'))
     txs = get_recent_usdt_transactions()
 
     for tx in txs:
-        if tx["to"].lower() != WALLET_USDT.lower():
-            continue
+        # Une transaction mal formee ou une erreur de traitement ne doit pas
+        # interrompre le traitement des autres transactions.
+        try:
+            _process_transaction(tx)
+        except Exception:
+            logger.exception("[Checker] Echec du traitement de la transaction %s", tx.get("hash"))
 
-        tx_hash = tx["hash"]
-        sender = tx["from"]
-        montant_usdt = int(tx["value"]) / (10 ** USDT_DECIMALS)
 
-        if montant_usdt < 0.34:
-            continue
+def _process_transaction(tx):
+    if tx["to"].lower() != WALLET_USDT.lower():
+        return
 
-        if is_tx_already_processed(tx_hash):
-            continue
+    tx_hash = tx["hash"]
+    sender = tx["from"]
+    montant_usdt = int(tx["value"]) / (10 ** USDT_DECIMALS)
 
-        print(f"[Paiement] {montant_usdt} USDT de {sender}")
+    if montant_usdt < 0.34:
+        return
 
-        pending = get_pending_payment_by_sender(sender)
-        if pending:
-            activer_compte(pending["user_id"], tx_hash, montant_usdt)
-            continue
+    if is_tx_already_processed(tx_hash):
+        return
 
-        unmatched = get_pending_payments_unmatched()
-        if unmatched:
-            oldest = unmatched[-1]
-            activer_compte(oldest["user_id"], tx_hash, montant_usdt)
-            conn = get_db()
+    logger.info("[Paiement] %s USDT de %s", montant_usdt, sender)
+
+    pending = get_pending_payment_by_sender(sender)
+    if pending:
+        activer_compte(pending["user_id"], tx_hash, montant_usdt)
+        return
+
+    unmatched = get_pending_payments_unmatched()
+    if unmatched:
+        oldest = unmatched[-1]
+        activer_compte(oldest["user_id"], tx_hash, montant_usdt)
+        conn = get_db()
+        try:
             conn.execute("UPDATE users SET wallet_sender=? WHERE id=?", (sender, oldest["user_id"]))
             conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
             conn.close()
-        else:
-            conn = get_db()
+    else:
+        conn = get_db()
+        try:
             conn.execute("""
                 INSERT OR IGNORE INTO paiements (user_id, montant, statut, tx_hash, date)
                 VALUES (0, ?, 'non_associe', ?, ?)
             """, (montant_usdt, tx_hash, datetime.now().strftime("%Y-%m-%d %H:%M")))
             conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
             conn.close()
-            print(f"[WARN] Transaction non associee: {tx_hash}")
+        logger.warning("[WARN] Transaction non associee: %s", tx_hash)
 
 
 def start_payment_checker(interval=60):
@@ -164,10 +214,10 @@ def start_payment_checker(interval=60):
         while True:
             try:
                 check_payments()
-            except Exception as e:
-                print(f"[Erreur checker] {e}")
+            except Exception:
+                logger.exception("[Erreur checker] Echec du cycle de verification")
             time.sleep(interval)
 
     t = threading.Thread(target=loop, daemon=True)
     t.start()
-    print(f"[Checker] Demarre (interval: {interval}s)")
+    logger.info("[Checker] Demarre (interval: %ss)", interval)
