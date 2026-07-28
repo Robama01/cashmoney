@@ -1,4 +1,4 @@
-       print("APP LOADED")                             import os
+print("APP LOADED") import os
 import secrets
 import hashlib
 from datetime import datetime
